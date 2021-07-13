@@ -21,14 +21,14 @@ func failOnError(err error, msg string) {
 }
 
 func main() {
-	var resultTime []int64
+	var resultTime []time.Duration
 	// make gorutins-threads
-	countThreads := 5
-	countChecks := 10
-	for thread:=0;thread < countThreads;thread++{
+	countThreads := 100
+	countChecks := 1000
+	for thread := 0; thread < countThreads; thread++ {
 		go func() {
-			for i:=0;i < countChecks / countThreads;i++{
-				start := time.Now().UnixNano()
+			for i := 0; i < countChecks/countThreads; i++ {
+				start := time.Now()
 
 				inputData := protocol.CreateTaskRequest{
 					Application:  "testmazafaka",
@@ -39,29 +39,32 @@ func main() {
 
 				jsonValue, _ := json.Marshal(inputData)
 
-				//_, err := doPOSTRequest("http://127.0.0.1:5003/v2/check/create",
-				_, err := doPOSTRequest("http://127.0.0.1:8080/create",
+				_, err := doPOSTRequest("http://127.0.0.1:5003/v2/check/create",
+					//_, err := doPOSTRequest("http://127.0.0.1:8080/create",
 					"2xFcJM599JxF2TDsOFWK3GKWbXHm5yL3FvG4b1tnxGFzyxq3yxfyhNZh", bytes.NewBuffer(jsonValue))
-				if err != nil{
+				if err != nil {
 					log.Fatal(err)
 				}
 				//log.Println(string(resp))
-				t := time.Now().UnixNano() - start
+				t := time.Since(start)
 				resultTime = append(resultTime, t)
 			}
 			var result int64
-			for _, index := range resultTime{
-				result += index
+			for _, index := range resultTime {
+				result += index.Nanoseconds()
 			}
-			res := result/int64(len(resultTime))
+			res := result / int64(len(resultTime))
 			fmt.Println(time.Unix(0, res))
 			fmt.Println(strconv.FormatInt(result/int64(len(resultTime)), 10))
 		}()
 
 	}
-	<-time.After(time.Second * 5)
+	<-time.After(time.Second * 10) // add because main func is gorutine
 	//fmt.Println(resultTime)
 	//00:00.005672445 - go 00:00.010611637 - python sync 100 checks
+	//00:00.015530368 - go 00:00.060872821 -python 100 checks 10 threads
+	//00:00.067346855  - go 00:00.282587124 -python 500 checks 50 threads
+	//00:00.12720488 - go  00:00.626945576 -python 1000 checks 100 threads
 }
 
 func rabbit() {
@@ -121,7 +124,12 @@ func doPOSTRequest(url string, token string, jsonBody io.Reader) ([]byte, error)
 		fmt.Println("ERR", err)
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(response.Body)
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		fmt.Println("ERRRROR", err)
@@ -129,4 +137,3 @@ func doPOSTRequest(url string, token string, jsonBody io.Reader) ([]byte, error)
 	}
 	return body, nil
 }
-

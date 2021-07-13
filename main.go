@@ -10,9 +10,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,9 +22,11 @@ func main() {
 	router := gin.Default()
 
 	router.Use(makeMeAuth())
-	//c.JSON(200, gin.H{"result": "get product", "token": token})
 	router.POST("/create", createTask)
-	router.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+	err := router.Run()
+	if err != nil {
+		log.Fatal(err)
+	} // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 }
 
 func createTask(c *gin.Context) {
@@ -66,8 +70,8 @@ func createTask(c *gin.Context) {
 		}},
 		{"methods", task.CheckMethods},
 		{"application", struct {
-			Ref interface{}   `bson:"$ref"`
-			ID  interface{}   `bson:"$id"`
+			Ref interface{} `bson:"$ref"`
+			ID  interface{} `bson:"$id"`
 		}{Ref: "application", ID: ApplicationObj.Id}},
 		{"application_id", ApplicationObj.Id},
 	}
@@ -75,7 +79,12 @@ func createTask(c *gin.Context) {
 	if insertErr != nil {
 		log.Fatal(insertErr)
 	}
-	defer client.Disconnect(ctx)
+	defer func(client *mongo.Client, ctx context.Context) {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			log.Println(err)
+		}
+	}(client, ctx)
 	if oid, ok := res.InsertedID.(primitive.ObjectID); ok {
 		objId := oid.Hex()
 		transport.SendObjectIdToQueue(objId, ApplicationObj.Description)
@@ -98,7 +107,10 @@ type Application struct {
 	AllowedCheckMethods map[string][]string `bson:"allowed_check_methods"`
 }
 
-var ApplicationObj Application // make global because can use in more then one function
+var (
+	ApplicationObj   = Application{} // make global because can use in more then one function
+	ApplicationMutex = sync.RWMutex{}
+)
 
 func makeMeAuth() gin.HandlerFunc {
 	// create a value into which the result can be decoded
@@ -117,9 +129,9 @@ func makeMeAuth() gin.HandlerFunc {
 		}
 		token := AuthSchema[1]
 		var result Token
-		db, ctx, client := models.GetDb()
+		db, ctx, _ := models.GetDb()
 		collection := db.Collection("apitoken")
-		err := collection.FindOne(context.TODO(), bson.D{{"token", token}}).Decode(&result)
+		err := collection.FindOne(ctx, bson.D{{"token", token}}).Decode(&result)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusForbidden, gin.H{"error": fmt.Sprintf("Token %s is not found", token)})
@@ -134,22 +146,11 @@ func makeMeAuth() gin.HandlerFunc {
 		}
 		if oid, ok := result.Application.ID.(primitive.ObjectID); ok {
 			ApplicationObj.Id = oid.Hex()
-
 		}
 		collection = db.Collection("application")
-		//var (
-		//	someMap      = map[string]interface{}{}
-		//	someMapMutex = sync.RWMutex{}
-		//)
-		//go func() {
-		//	someMapMutex.Lock()
-		//	someMap["_id"] = result.Application.ID
-		//	someMapMutex.Unlock()
-		//}()
-		//someMapMutex.RLock()
-		err = collection.FindOne(context.TODO(), bson.D{{"_id", result.Application.ID}}).Decode(&ApplicationObj)
-		//err = collection.FindOne(context.TODO(), bson.D{{"_id", result.Application.ID}}).Decode(&ApplicationObj)
-		//someMapMutex.RUnlock()
+		ApplicationMutex.Lock()
+		err = collection.FindOne(ctx, bson.M{"_id": result.Application.ID}).Decode(&ApplicationObj)
+		ApplicationMutex.Unlock()
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusForbidden, gin.H{"error": fmt.Sprintf("Application %s is not found", ApplicationObj.Id)})
@@ -157,7 +158,7 @@ func makeMeAuth() gin.HandlerFunc {
 			return
 		}
 
-		defer client.Disconnect(ctx)
+		//defer client.Disconnect(ctx)
 		c.Next()
 	}
 
