@@ -1,5 +1,10 @@
 package protocol
 
+import (
+	"reflect"
+	"strings"
+)
+
 type CreateTaskRequest struct {
 	Application  string              `json:"application_id" binding:"required"`
 	Priority     string              `json:"priority,omitempty"`
@@ -9,31 +14,44 @@ type CreateTaskRequest struct {
 	Payload      Payload             `json:"payload"  binding:"required"`
 }
 
-func (c *CreateTaskRequest) CheckEntityType() {
-
-}
-
 type ObjectId struct {
 	Id string `json:"id"`
 }
 
 type Payload struct {
-	Inn string `json:"inn" binding:"numeric,min=9,max=12"`
+	Inn            string `json:"inn,omitempty" validate:"numeric,min=10,max=12"`
+	PassportNumber string `json:"passport_number,omitempty" validate:"numeric,min=6,max=6"`
 }
 
-//func (c CreateTaskRequest) ValidateInputData(token string)  {
-//	// validate entity_type
-//	entityTypes := []string{"individual", "corporate", "entrepreneur"}
-//	validTask := false
-//	for _, entity := range entityTypes {
-//			if c.EntityType == entity {
-//				validTask = true
-//				break
-//		}
-//	}
-//
-//
-//	//  validate check_methods - find check_methods from auth token
-//
-//
-//}
+// GetField возвращает атрибут объекта с помощью строкового названия
+// Например Payload.GetField("passport_number") == Payload.PassportNumber
+func (p *Payload) GetField(field string) (interface{}, bool) {
+	field = toCamelCase(field)
+	r := reflect.ValueOf(p)
+	f := reflect.Indirect(r).FieldByName(field)
+	result := f.String()
+	fieldExists := true
+	if result == "<invalid Value>" {
+		fieldExists = false
+	}
+	return f.String(), fieldExists
+}
+
+func toCamelCase(s string) string {
+	words := strings.Split(s, "_")
+	res := ""
+	for _, word := range words {
+		res += strings.Title(word)
+	}
+	return res
+}
+
+type Method struct {
+	EntityTypes  []string `json:"entity_types"`
+	Description  string   `json:"description"`
+	RequiredKeys []string `json:"required_keys"`
+	ArgsSchema   struct {
+	} `json:"args_schema"`
+	AdditionalDataSchema struct {
+	} `json:"additional_data_schema"`
+}

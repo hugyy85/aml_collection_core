@@ -34,13 +34,13 @@ func main() {
 					Application:  "testmazafaka",
 					EntityType:   "corporate",
 					CheckMethods: map[string][]string{"spark": {"status"}},
-					Payload:      protocol.Payload{"1234657897"},
+					Payload:      protocol.Payload{Inn: "1234567890"},
 				}
 
 				jsonValue, _ := json.Marshal(inputData)
 
-				_, err := doPOSTRequest("http://127.0.0.1:5003/v2/check/create",
-					//_, err := doPOSTRequest("http://127.0.0.1:8080/create",
+				//_, err := doPOSTRequest("http://127.0.0.1:5003/v2/check/create",
+				_, err := doPOSTRequest("http://127.0.0.1:8080/create",
 					"2xFcJM599JxF2TDsOFWK3GKWbXHm5yL3FvG4b1tnxGFzyxq3yxfyhNZh", bytes.NewBuffer(jsonValue))
 				if err != nil {
 					log.Fatal(err)
@@ -59,12 +59,12 @@ func main() {
 		}()
 
 	}
-	<-time.After(time.Second * 10) // add because main func is gorutine
+	<-time.After(time.Second * 15) // add because main func is gorutine
 	//fmt.Println(resultTime)
 	//00:00.005672445 - go 00:00.010611637 - python sync 100 checks
 	//00:00.015530368 - go 00:00.060872821 -python 100 checks 10 threads
-	//00:00.067346855  - go 00:00.282587124 -python 500 checks 50 threads
-	//00:00.12720488 - go  00:00.626945576 -python 1000 checks 100 threads
+	//00:00.067346855 - go 00:00.282587124 -python 500 checks 50 threads
+	//00:00.117653474 - go  00:00.626945576 -python 1000 checks 100 threads
 }
 
 func rabbit() {

@@ -6,13 +6,16 @@ import (
 	"aml_collection_core/transport"
 	"aml_collection_core/utils"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +23,6 @@ import (
 
 func main() {
 	router := gin.Default()
-
 	router.Use(makeMeAuth())
 	router.POST("/create", createTask)
 	err := router.Run()
@@ -51,7 +53,11 @@ func createTask(c *gin.Context) {
 			}
 		}
 	}
-	//Нужно обработать индивидуалов корпорейтов и методы для них доступные
+	isValid, err := validEntityData(task)
+	if !isValid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err})
+		return
+	}
 	db, ctx, client := models.GetDb()
 	collection := db.Collection("checks")
 	insertData := bson.D{
@@ -108,7 +114,7 @@ type Application struct {
 }
 
 var (
-	ApplicationObj   = Application{} // make global because can use in more then one function
+	ApplicationObj   = Application{} // make global because can use in more then one function after makeMeAuth()
 	ApplicationMutex = sync.RWMutex{}
 )
 
@@ -163,3 +169,55 @@ func makeMeAuth() gin.HandlerFunc {
 	}
 
 }
+
+// validEntityData - Проверяет входные данные, на предмет корректности checkMethods, entityType, requireKeys, args
+func validEntityData(task protocol.CreateTaskRequest) (bool, string) {
+	entityTypes := []string{"individual", "corporate", "entrepreneur"}
+	if !utils.Contains(entityTypes, task.EntityType) {
+		return false, fmt.Sprintf("'%s' entity type does not exist. Use %s", task.EntityType, entityTypes)
+	}
+	var sourceMethods map[string]map[string]map[string]protocol.Method
+	jsonFile, err := os.Open("sourceMethods.json")
+	if err != nil {
+		log.Println(err)
+	}
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+	err = json.Unmarshal(byteValue, &sourceMethods)
+	if err != nil {
+		log.Println(err)
+	}
+	defer jsonFile.Close()
+	// Необходимо проверить источник и метод а также пейлоад, тип лица и аргументы
+	for source, methods := range task.CheckMethods {
+		for _, method := range methods {
+			existMethod, ok := sourceMethods[source]["methods"][method]
+			// check method exists
+			if !ok {
+				return false, fmt.Sprintf("Method '%s' in source '%s' does not exists", method, source)
+			}
+			// check entity type for exists method
+			if !utils.Contains(existMethod.EntityTypes, task.EntityType) {
+				return false, fmt.Sprintf("Not correct entity type '%s' for '%s - %s' method. Use %s",
+					task.EntityType, source, method, existMethod.EntityTypes)
+			}
+
+			// check require keys for exists method
+			for _, requireKey := range existMethod.RequiredKeys {
+				_, ok := task.Payload.GetField(requireKey)
+				if !ok {
+					return false, fmt.Sprintf("Missing require keys. '%s' source '%s' method - has require keys %s",
+						source, method, existMethod.RequiredKeys)
+				}
+			}
+			// check args for exists method
+			// ****************
+
+			///
+		}
+	}
+	return true, ""
+}
+
+//curl -v -X POST http://localhost:8080/create -H 'content-type: application/json' \
+//-d '{"application_id": "test","check_methods": {"spark": ["status"]},"payload": {"inn": "1234578901", "passport_number": "123456"}, "entity_type": "individual"}' \
+//-H 'Authorization: Bearer 2xFcJM599JxF2TDsOFWK3GKWbXHm5yL3FvG4b1tnxGFzyxq3yxfyhNZh'

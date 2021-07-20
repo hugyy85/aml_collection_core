@@ -1,0 +1,58 @@
+{
+  "cft_postgres": {
+    "methods": {
+      "blacklist": {
+        "entity_types": [
+          "individual",
+          "corporate",
+          "entrepreneur"
+        ],
+        "description": "string",
+        "required_keys": [
+          "passport_series",
+          "passport_number"
+        ],
+        "args_schema": {},
+        "additional_data_schema": {}
+      },
+      "deny_list": {
+        "entity_types": [
+          "*"
+        ],
+        "description": "string",
+        "required_keys": [
+          "first_name",
+          "second_name"
+        ],
+        "args_schema": {},
+        "additional_data_schema": {}
+      },
+      "terrors": {
+        "entity_types": [
+          "corporate"
+        ],
+        "description": "string",
+        "required_keys": [
+          "inn"
+        ],
+        "args_schema": {},
+        "additional_data_schema": {}
+      }
+    }
+  },
+  "spark": {
+    "methods": {
+      "status": {
+        "entity_types": [
+          "corporate"
+        ],
+        "description": "string",
+        "required_keys": [
+          "inn"
+        ],
+        "args_schema": {},
+        "additional_data_schema": {}
+      }
+    }
+  }
+}
